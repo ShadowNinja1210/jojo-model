@@ -48,6 +48,6 @@ microphone:
 micro_wake_word:
   microphone: mic_input
   models:
-    - model: http://localhost:8000/hello_jojo.json
+    - model: https://raw.githubusercontent.com/ShadowNinja1210/jojo-model/main/hello_jojo.json
   on_wake_word_detected:
     - logger.log: "Hello Jojo detected!"
