@@ -1,0 +1,15 @@
+{
+  "type": "micro",
+  "wake_word": "hello jojo",
+  "author": "you",
+  "website": "",
+  "trained_languages": ["en"],
+  "version": 2,
+  "model": "http://localhost:8000/stream_state_internal_quant.tflite",
+  "micro": {
+    "probability_cutoff": 0.94,
+    "sliding_window_size": 5,
+    "feature_step_size": 10,
+    "tensor_arena_size": 30000
+  }
+}
