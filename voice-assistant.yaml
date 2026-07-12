@@ -1,0 +1,53 @@
+esphome:
+  name: voice-assistant
+
+esp32:
+  board: esp32-s3-devkitc-1
+  framework:
+    type: esp-idf
+
+psram:
+  mode: octal
+  speed: 80MHz
+
+logger:
+
+api:
+  encryption:
+    key: "pcw5I+PRXzH5aIYwW80edw4nKxLn2KrNuEiJOuqhyZ0="
+
+ota:
+  - platform: esphome
+
+wifi:
+  ssid: "Airtel_Ninja"
+  password: "Flat@g02"
+
+  ap:
+    ssid: "Voice-Assistant Fallback Hotspot"
+    password: "GjK1FZ1dcNeX"
+
+captive_portal:
+
+i2s_audio:
+  - id: i2s_in
+    i2s_lrclk_pin: GPIO4
+    i2s_bclk_pin: GPIO5
+
+microphone:
+  - platform: i2s_audio
+    id: mic_input
+    i2s_audio_id: i2s_in
+    i2s_din_pin: GPIO6
+    adc_type: external
+    pdm: false
+    channel: left
+    sample_rate: 16000
+    bits_per_sample: 32bit
+
+micro_wake_word:
+  microphone: mic_input
+  models:
+    - model: http://localhost:8000/hello_jojo.json
+  on_wake_word_detected:
+    - logger.log: "Hello Jojo detected!"
