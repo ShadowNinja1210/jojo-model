@@ -2,8 +2,7 @@
   "type": "micro",
   "wake_word": "hello jojo",
   "author": "you",
-  "website": "",
-  "model": "stream_state_internal_quant.tflite",
+  "model": "https://raw.githubusercontent.com/ShadowNinja1210/jojo-model/main/stream_state_internal_quant.tflite",
   "trained_languages": ["en"],
   "version": 2,
   "micro": {
