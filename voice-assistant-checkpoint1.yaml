@@ -1,0 +1,99 @@
+esphome:
+  name: voice-assistant
+  on_boot:
+    - priority: -100
+      then:
+        - micro_wake_word.start
+
+esp32:
+  board: esp32-s3-devkitc-1
+  framework:
+    type: esp-idf
+
+psram:
+  mode: octal
+  speed: 80MHz
+
+logger:
+  level: DEBUG
+  hardware_uart: UART0
+
+api:
+  encryption:
+    key: "pcw5I+PRXzH5aIYwW80edw4nKxLn2KrNuEiJOuqhyZ0="
+
+ota:
+  - platform: esphome
+
+wifi:
+  ssid: "Airtel_Ninja"
+  password: "Flat@g02"
+  ap:
+    ssid: "Voice-Assistant Fallback Hotspot"
+    password: "GjK1FZ1dcNeX"
+
+captive_portal:
+
+globals:
+  - id: oled_line1
+    type: std::string
+    restore_value: false
+    initial_value: '"Listening for"'
+  - id: oled_line2
+    type: std::string
+    restore_value: false
+    initial_value: '"Hello Jojo..."'
+
+spi:
+  clk_pin: GPIO12
+  mosi_pin: GPIO11
+
+font:
+  - file: "gfonts://Roboto"
+    id: oled_font
+    size: 14
+
+display:
+  - platform: ssd1306_spi
+    id: oled_display
+    model: "SSD1306_128X64"
+    cs_pin: GPIO8
+    dc_pin: GPIO9
+    reset_pin: GPIO10
+    lambda: |-
+      it.printf(0, 0, id(oled_font), "%s", id(oled_line1).c_str());
+      it.printf(0, 20, id(oled_font), "%s", id(oled_line2).c_str());
+
+i2s_audio:
+  - id: i2s_in
+    i2s_lrclk_pin: GPIO4
+    i2s_bclk_pin: GPIO5
+
+microphone:
+  - platform: i2s_audio
+    id: mic_input
+    i2s_audio_id: i2s_in
+    i2s_din_pin: GPIO6
+    adc_type: external
+    pdm: false
+    channel: left
+    sample_rate: 16000
+    bits_per_sample: 32bit
+
+micro_wake_word:
+  microphone: mic_input
+  task_stack_in_psram: true
+  models:
+    - model: https://raw.githubusercontent.com/ShadowNinja1210/jojo-model/main/hello_jojo.json
+  on_wake_word_detected:
+    - logger.log: "Hello Jojo detected!"
+    - lambda: |-
+        id(oled_line1) = "Wake Word";
+        id(oled_line2) = "Detected!";
+    - lambda: id(oled_display).update();
+    - delay: 2s
+    - lambda: |-
+        id(oled_line1) = "Listening for";
+        id(oled_line2) = "Hello Jojo...";
+    - lambda: id(oled_display).update();
+    - micro_wake_word.start
