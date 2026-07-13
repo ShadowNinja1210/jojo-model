@@ -82,16 +82,17 @@ microphone:
 
 micro_wake_word:
   microphone: mic_input
-  task_stack_in_psram: true
   models:
     - model: https://raw.githubusercontent.com/ShadowNinja1210/jojo-model/main/hello_jojo.json
   on_wake_word_detected:
     - logger.log: "Hello Jojo detected!"
+    - logger.log: "Updating OLED now..."
     - lambda: |-
-        id(oled_line1) = "Wake Word";
-        id(oled_line2) = "Detected!";
+        id(oled_line1) = "Hello Jojo";
+        id(oled_line2) = "detected!";
     - lambda: id(oled_display).update();
-    - delay: 2s
+    - logger.log: "OLED update() called"
+    - delay: 5s
     - lambda: |-
         id(oled_line1) = "Listening for";
         id(oled_line2) = "Hello Jojo...";
