@@ -1,5 +1,15 @@
 esphome:
   name: voice-assistant
+  on_boot:
+    - priority: -100
+      then:
+        - micro_wake_word.start
+        - lambda: |-
+            id(mic_input)->add_data_callback([](const std::vector<uint8_t> &data) {
+              if (id(is_recording)) {
+                id(audio_buffer).insert(id(audio_buffer).end(), data.begin(), data.end());
+              }
+            });
 
 esp32:
   board: esp32-s3-devkitc-1
@@ -11,6 +21,10 @@ psram:
   speed: 80MHz
 
 logger:
+  level: VERY_VERBOSE
+  hardware_uart: UART0
+  logs:
+    micro_wake_word: VERY_VERBOSE
 
 api:
   encryption:
@@ -22,12 +36,52 @@ ota:
 wifi:
   ssid: "Airtel_Ninja"
   password: "Flat@g02"
-
   ap:
     ssid: "Voice-Assistant Fallback Hotspot"
     password: "GjK1FZ1dcNeX"
 
 captive_portal:
+
+http_request:
+  id: http_client
+  timeout: 10s
+
+globals:
+  - id: audio_buffer
+    type: std::vector<uint8_t>
+    restore_value: false
+  - id: is_recording
+    type: bool
+    restore_value: false
+    initial_value: 'false'
+  - id: oled_line1
+    type: std::string
+    restore_value: false
+    initial_value: '"Listening for"'
+  - id: oled_line2
+    type: std::string
+    restore_value: false
+    initial_value: '"Hello Jojo..."'
+
+spi:
+  clk_pin: GPIO12
+  mosi_pin: GPIO11
+
+font:
+  - file: "gfonts://Roboto"
+    id: oled_font
+    size: 14
+
+display:
+  - platform: ssd1306_spi
+    id: oled_display
+    model: "SSD1306_128X64"
+    cs_pin: GPIO8
+    dc_pin: GPIO9
+    reset_pin: GPIO10
+    lambda: |-
+      it.printf(0, 0, id(oled_font), "%s", id(oled_line1).c_str());
+      it.printf(0, 20, id(oled_font), "%s", id(oled_line2).c_str());
 
 i2s_audio:
   - id: i2s_in
@@ -47,7 +101,40 @@ microphone:
 
 micro_wake_word:
   microphone: mic_input
+  task_stack_in_psram: true
   models:
     - model: https://raw.githubusercontent.com/ShadowNinja1210/jojo-model/main/hello_jojo.json
   on_wake_word_detected:
-    - logger.log: "Hello Jojo detected!"
+    - lambda: |-
+        id(audio_buffer).clear();
+        id(is_recording) = true;
+        id(oled_line1) = "Recording...";
+        id(oled_line2) = "Speak now";
+    - lambda: id(oled_display).update();
+    - microphone.capture: mic_input
+    - delay: 5s
+    - microphone.stop_capture: mic_input
+    - lambda: |-
+        id(is_recording) = false;
+        id(oled_line1) = "Uploading...";
+        id(oled_line2) = "";
+    - lambda: id(oled_display).update();
+    - http_request.post:
+        url: "http://192.168.1.8:3000/upload"
+        request_headers:
+          Content-Type: application/octet-stream
+        body: !lambda |-
+          return std::string((const char *) id(audio_buffer).data(), id(audio_buffer).size());
+        on_response:
+          then:
+            - lambda: |-
+                id(oled_line1) = "Upload done!";
+                id(oled_line2) = "Check your PC";
+            - lambda: id(oled_display).update();
+        on_error:
+          then:
+            - lambda: |-
+                id(oled_line1) = "Upload FAILED";
+                id(oled_line2) = "Check server/WiFi";
+            - lambda: id(oled_display).update();
+    - micro_wake_word.start

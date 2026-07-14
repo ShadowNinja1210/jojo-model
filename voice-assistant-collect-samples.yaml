@@ -1,0 +1,167 @@
+esphome:
+  name: voice-assistant
+  on_boot:
+    - priority: -100
+      then:
+        - lambda: |-
+            #include "esp_heap_caps.h"
+            static uint8_t* audio_buf = (uint8_t*) heap_caps_malloc(48000, MALLOC_CAP_SPIRAM);
+            id(audio_buffer_ptr) = audio_buf;
+            id(mic_input)->add_data_callback([](const std::vector<uint8_t> &data) {
+              if (id(is_recording) && id(audio_buffer_ptr) != nullptr) {
+                size_t num_samples = data.size() / 4;
+                for (size_t i = 0; i < num_samples; i++) {
+                  if (id(audio_len) + 2 > 48000) break;
+                  int32_t sample;
+                  memcpy(&sample, &data[i * 4], 4);
+                  int16_t converted = (int16_t)(sample >> 14);
+                  memcpy(id(audio_buffer_ptr) + id(audio_len), &converted, 2);
+                  id(audio_len) += 2;
+                }
+              }
+            });
+        - lambda: |-
+            id(oled_line1) = "Ready";
+            id(oled_line2) = "Sample #" + std::to_string(id(sample_count));
+        - lambda: id(oled_display).update();
+
+esp32:
+  board: esp32-s3-devkitc-1
+  framework:
+    type: esp-idf
+    sdkconfig_options:
+      CONFIG_SPIRAM_USE_MALLOC: "y"
+      CONFIG_SPIRAM_MALLOC_ALWAYSINTERNAL: "16384"
+      CONFIG_SPIRAM_MALLOC_RESERVE_INTERNAL: "32768"
+
+psram:
+  mode: octal
+  speed: 80MHz
+
+logger:
+  level: DEBUG
+  hardware_uart: UART0
+
+api:
+  encryption:
+    key: "pcw5I+PRXzH5aIYwW80edw4nKxLn2KrNuEiJOuqhyZ0="
+
+ota:
+  - platform: esphome
+
+wifi:
+  ssid: "Airtel_Ninja"
+  password: "Flat@g02"
+  ap:
+    ssid: "Voice-Assistant Fallback Hotspot"
+    password: "GjK1FZ1dcNeX"
+
+captive_portal:
+
+web_server:
+  port: 80
+  version: 3
+
+http_request:
+  id: http_client
+  timeout: 10s
+
+globals:
+  - id: audio_buffer_ptr
+    type: uint8_t*
+    restore_value: false
+    initial_value: 'nullptr'
+  - id: audio_len
+    type: size_t
+    restore_value: false
+    initial_value: '0'
+  - id: is_recording
+    type: bool
+    restore_value: false
+    initial_value: 'false'
+  - id: sample_count
+    type: int
+    restore_value: true
+    initial_value: '0'
+  - id: oled_line1
+    type: std::string
+    restore_value: false
+    initial_value: '"Ready"'
+  - id: oled_line2
+    type: std::string
+    restore_value: false
+    initial_value: '"Sample #0"'
+
+spi:
+  clk_pin: GPIO12
+  mosi_pin: GPIO11
+
+font:
+  - file: "gfonts://Roboto"
+    id: oled_font
+    size: 14
+
+display:
+  - platform: ssd1306_spi
+    id: oled_display
+    model: "SSD1306_128X64"
+    cs_pin: GPIO8
+    dc_pin: GPIO9
+    reset_pin: GPIO10
+    lambda: |-
+      it.printf(0, 0, id(oled_font), "%s", id(oled_line1).c_str());
+      it.printf(0, 20, id(oled_font), "%s", id(oled_line2).c_str());
+
+i2s_audio:
+  - id: i2s_in
+    i2s_lrclk_pin: GPIO4
+    i2s_bclk_pin: GPIO5
+
+microphone:
+  - platform: i2s_audio
+    id: mic_input
+    i2s_audio_id: i2s_in
+    i2s_din_pin: GPIO6
+    adc_type: external
+    pdm: false
+    channel: left
+    sample_rate: 16000
+    bits_per_sample: 32bit
+
+button:
+  - platform: template
+    name: "Record Sample"
+    on_press:
+      - lambda: |-
+          id(oled_line1) = "Recording...";
+          id(oled_line2) = "Say it now";
+      - lambda: id(oled_display).update();
+      - lambda: |-
+          id(audio_len) = 0;
+          id(is_recording) = true;
+      - microphone.capture: mic_input
+      - delay: 1500ms
+      - lambda: id(is_recording) = false;
+      - microphone.stop_capture: mic_input
+      - lambda: |-
+          id(oled_line1) = "Saving...";
+      - lambda: id(oled_display).update();
+      - http_request.post:
+          url: "http://192.168.1.8:3000/record_sample"
+          request_headers:
+            Content-Type: application/octet-stream
+          body: !lambda |-
+            return std::string((const char *) id(audio_buffer_ptr), id(audio_len));
+          on_response:
+            then:
+              - lambda: id(sample_count) += 1;
+              - lambda: |-
+                  id(oled_line1) = "Ready";
+                  id(oled_line2) = "Sample #" + std::to_string(id(sample_count));
+              - lambda: id(oled_display).update();
+          on_error:
+            then:
+              - lambda: |-
+                  id(oled_line1) = "Save FAILED";
+                  id(oled_line2) = "Check server";
+              - lambda: id(oled_display).update();

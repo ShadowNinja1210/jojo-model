@@ -1,0 +1,91 @@
+esphome:
+  name: voice-assistant
+  on_boot:
+    - priority: -100
+      then:
+        - delay: 2s
+        - microphone.capture: mic_input
+        - logger.log: "Recording 5s test clip..."
+        - lambda: |-
+            id(audio_buffer).clear();
+            id(is_recording) = true;
+        - delay: 5s
+        - lambda: id(is_recording) = false;
+        - microphone.stop_capture: mic_input
+        - logger.log: "Uploading test clip..."
+        - http_request.post:
+            url: "http://192.168.1.8:3000/upload"
+            request_headers:
+              Content-Type: application/octet-stream
+            body: !lambda |-
+              return std::string((const char *) id(audio_buffer).data(), id(audio_buffer).size());
+            on_response:
+              then:
+                - logger.log: "Upload done"
+            on_error:
+              then:
+                - logger.log: "Upload FAILED"
+        - lambda: |-
+            id(mic_input)->add_data_callback([](const std::vector<uint8_t> &data) {
+              if (id(is_recording)) {
+                id(audio_buffer).insert(id(audio_buffer).end(), data.begin(), data.end());
+              }
+            });
+
+esp32:
+  board: esp32-s3-devkitc-1
+  framework:
+    type: esp-idf
+
+psram:
+  mode: octal
+  speed: 80MHz
+
+logger:
+  level: DEBUG
+  hardware_uart: UART0
+
+api:
+  encryption:
+    key: "pcw5I+PRXzH5aIYwW80edw4nKxLn2KrNuEiJOuqhyZ0="
+
+ota:
+  - platform: esphome
+
+wifi:
+  ssid: "Airtel_Ninja"
+  password: "Flat@g02"
+  ap:
+    ssid: "Voice-Assistant Fallback Hotspot"
+    password: "GjK1FZ1dcNeX"
+
+captive_portal:
+
+http_request:
+  id: http_client
+  timeout: 10s
+
+globals:
+  - id: audio_buffer
+    type: std::vector<uint8_t>
+    restore_value: false
+  - id: is_recording
+    type: bool
+    restore_value: false
+    initial_value: 'false'
+
+i2s_audio:
+  - id: i2s_in
+    i2s_lrclk_pin: GPIO4
+    i2s_bclk_pin: GPIO5
+
+microphone:
+  - platform: i2s_audio
+    id: mic_input
+    i2s_audio_id: i2s_in
+    i2s_din_pin: GPIO6
+    adc_type: external
+    pdm: false
+    channel: left
+    sample_rate: 16000
+    bits_per_sample: 32bit
